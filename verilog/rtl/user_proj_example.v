@@ -75,91 +75,92 @@ module user_proj_example #(
     wire [`MPRJ_IO_PADS-1:0] io_out;
     wire [`MPRJ_IO_PADS-1:0] io_oeb;
 
-    wire [31:0] rdata; 
-    wire [31:0] wdata;
-    wire [BITS-1:0] count;
+    
 
-    wire valid;
-    wire [3:0] wstrb;
-    wire [31:0] la_write;
-
-    // WB MI A
-    assign valid = wbs_cyc_i && wbs_stb_i; 
-    assign wstrb = wbs_sel_i & {4{wbs_we_i}};
-    assign wbs_dat_o = rdata;
-    assign wdata = wbs_dat_i;
-
+   
     // IO
-    assign io_out = count;
-    assign io_oeb = {(`MPRJ_IO_PADS-1){rst}};
+    assign clk = wb_clk_i;
+    assign reset = wb_rst_i;
+    assign i_d = io_in[37];
+    assign d_d = io_in[36];
+    assign io_out[35] = pwm_out;
+    assign io_oeb = 0;
 
     // IRQ
     assign irq = 3'b000;	// Unused
+    wire i_d;
+    wire d_d;
+    wire pwm_out;
+    iiitb_pwm_gen MyDesign(.clk(clk),.rst(reset),.i_d(increase_duty),d_d(decrese_duty),.pwm_out(PWM_OUT));
+    
+    
 
-    // LA
-    assign la_data_out = {{(127-BITS){1'b0}}, count};
-    // Assuming LA probes [63:32] are for controlling the count register  
-    assign la_write = ~la_oenb[63:32] & ~{BITS{valid}};
-    // Assuming LA probes [65:64] are for controlling the count clk & reset  
-    assign clk = (~la_oenb[64]) ? la_data_in[64]: wb_clk_i;
-    assign rst = (~la_oenb[65]) ? la_data_in[65]: wb_rst_i;
-
-    counter #(
-        .BITS(BITS)
-    ) counter(
-        .clk(clk),
-        .reset(rst),
-        .ready(wbs_ack_o),
-        .valid(valid),
-        .rdata(rdata),
-        .wdata(wbs_dat_i),
-        .wstrb(wstrb),
-        .la_write(la_write),
-        .la_input(la_data_in[63:32]),
-        .count(count)
-    );
 
 endmodule
 
-module counter #(
-    parameter BITS = 32
-)(
-    input clk,
-    input reset,
-    input valid,
-    input [3:0] wstrb,
-    input [BITS-1:0] wdata,
-    input [BITS-1:0] la_write,
-    input [BITS-1:0] la_input,
-    output ready,
-    output [BITS-1:0] rdata,
-    output [BITS-1:0] count
-);
-    reg ready;
-    reg [BITS-1:0] count;
-    reg [BITS-1:0] rdata;
-
-    always @(posedge clk) begin
-        if (reset) begin
-            count <= 0;
-            ready <= 0;
-        end else begin
-            ready <= 1'b0;
-            if (~|la_write) begin
-                count <= count + 1;
-            end
-            if (valid && !ready) begin
-                ready <= 1'b1;
-                rdata <= count;
-                if (wstrb[0]) count[7:0]   <= wdata[7:0];
-                if (wstrb[1]) count[15:8]  <= wdata[15:8];
-                if (wstrb[2]) count[23:16] <= wdata[23:16];
-                if (wstrb[3]) count[31:24] <= wdata[31:24];
-            end else if (|la_write) begin
-                count <= la_write & la_input;
-            end
+module iiitb_pwm_gen
+ (
+ clk, // 100MHz clock input 
+ increase_duty, // input to increase 10% duty cycle 
+ decrease_duty, // input to decrease 10% duty cycle
+ reset, 
+ PWM_OUT // 10MHz PWM output signal 
+    );
+ 
+ input clk,reset;
+ input increase_duty;
+ input decrease_duty;
+ output PWM_OUT ;
+ wire slow_clk_enable; // slow clock enable signal for debouncing FFs(40MHz)
+ reg[27:0] counter_debounce;// counter for creating slow clock enable signals 
+ reg tmp1,tmp2;// temporary flip-flop signals for debouncing the increasing button
+ reg tmp3,tmp4;// temporary flip-flop signals for debouncing the decreasing button
+ wire duty_inc, duty_dec;
+ reg[3:0] counter_PWM;
+ reg[3:0] DUTY_CYCLE; 
+  // Debouncing 2 buttons for inc/dec duty cycle 
+  // Firstly generate slow clock enable for debouncing flip-flop 
+  
+ always @(posedge clk or posedge reset)
+ begin
+ if(reset) begin
+ counter_debounce<=28'd0;
+  counter_PWM<=4'd0;// counter for creating 10Mhz PWM signal
+  DUTY_CYCLE<=4'd5;// initial duty cycle is 50%
+  tmp1 <= 0;
+  tmp2 <= 0;
+  tmp3<=0;
+  tmp4<=0;
+  end
+ else begin
+ 	counter_debounce <= counter_debounce>=28'd1 ? 28'd0 : counter_debounce + 28'd1;
+ 	if(duty_inc==1 && DUTY_CYCLE <= 9) begin
+        DUTY_CYCLE <= DUTY_CYCLE + 4'd1;// increase duty cycle by 10%
         end
+        else if(duty_dec==1 && DUTY_CYCLE>=1) begin
+        //else begin
+        DUTY_CYCLE <= DUTY_CYCLE - 4'd1;
+        end//decrease duty cycle by 10%
+        counter_PWM <= counter_PWM + 4'd1;
+        if(counter_PWM>=9) begin
+        counter_PWM <= 0;
+        end
+        if(slow_clk_enable==1) begin// slow clock enable signal 
+  	tmp1 <= increase_duty;
+  	tmp2 <= tmp1;
+  	tmp3 <= decrease_duty;
+  	tmp4 <= tmp3;
+  	end
     end
-
+ end
+ 
+ assign slow_clk_enable = counter_debounce == 1 ?1:0;
+  
+ assign duty_inc =  tmp1 & (~ tmp2) & slow_clk_enable;
+  
+ assign duty_dec =  tmp3 & (~ tmp4) & slow_clk_enable;
+ 
+ assign PWM_OUT = counter_PWM < DUTY_CYCLE ? 1:0;
+ 
 endmodule
 `default_nettype wire
