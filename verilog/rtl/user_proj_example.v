@@ -91,7 +91,7 @@ module user_proj_example #(
     wire i_d;
     wire d_d;
     wire pwm_out;
-    iiitb_pwm_gen MyDesign(.clk(clk),.rst(reset),.i_d(increase_duty),d_d(decrese_duty),.pwm_out(PWM_OUT));
+    iiitb_pwm_gen MyDesign(.clk(clk),.rst(reset),.i_d(increase_duty),.d_d(decrese_duty),.pwm_out(PWM_OUT));
     
     
 
