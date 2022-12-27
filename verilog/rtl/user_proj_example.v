@@ -80,7 +80,7 @@ module user_proj_example #(
    
     // IO
     assign clk = wb_clk_i;
-    assign reset = wb_rst_i;
+    assign rst = wb_rst_i;
     assign i_d = io_in[37];
     assign d_d = io_in[36];
     assign io_out[35] = pwm_out;
@@ -91,7 +91,8 @@ module user_proj_example #(
     wire i_d;
     wire d_d;
     wire pwm_out;
-    iiitb_pwm_gen MyDesign(.clk(clk),.rst(reset),.i_d(increase_duty),.d_d(decrese_duty),.pwm_out(PWM_OUT));
+   
+   iiitb_pwm_gen Design(.clk(clk),.reset(rst),.increase_duty(i_d),.decrease_duty(d_d),.PWM_OUT(pwm_out));
     
     
 
